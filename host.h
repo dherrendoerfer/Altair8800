@@ -15,6 +15,8 @@
 #include "host_due.h"
 #elif defined(_WIN32) || defined(__linux__)
 #include "host_pc.h"
+#elif defined(__MK66FX1M0__)
+#include "host_teensy36.h"
 #else
 #error requires Arduino Mega2560, Arduino Due or Windows/Linux PC
 #endif
@@ -34,8 +36,8 @@ void     host_reset_function_switch_state();
 void        host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_primary_interface = true);
 void        host_serial_end(byte i);
 bool        host_serial_ok(byte i);
-int         host_serial_available(byte i);
-int         host_serial_available_for_write(byte i);
+int         host_serial__available(byte i);
+int         host_serial__available_for_write(byte i);
 int         host_serial_peek(byte i);
 int         host_serial_read(byte i);
 void        host_serial_flush(byte i);
@@ -72,7 +74,7 @@ bool    host_filesys_ok();
 #endif
 
 
-// at a minimum the host must provide persistent storage memory to which 
+// at a minimum the host must provide persistent storage memory to which
 // we can write and read, implementing our own mini-filesystem
 bool host_storage_init(bool write);
 void host_storage_close();
