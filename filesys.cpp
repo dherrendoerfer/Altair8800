@@ -799,7 +799,7 @@ void filesys_manage()
       filesys_print_dir();
       Serial.println(F("\n\nFile system is locked."));
       Serial.println(F("Press any key to return to main menu..."));
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       serial_read();
       return;
     }
@@ -813,7 +813,7 @@ void filesys_manage()
           Serial.print(F("\n\nCommand (dFrx): "));
         }
       
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       
       redraw = true;
       switch( serial_read() )
@@ -833,7 +833,7 @@ void filesys_manage()
                 Serial.print(F("Really delete file with id "));
                 numsys_print_byte(i);
                 Serial.print(F(" (y/n)? "));
-                while( !serial_available() );
+                while( !serial__available() );
                 if( serial_read()=='y' )
                   filesys_delete(i);
               }
@@ -882,7 +882,7 @@ void filesys_manage()
                     addr += n;
                     Serial.println();
 
-                    while( !serial_available() ) delay(50);
+                    while( !serial__available() ) delay(50);
                     if( serial_read()== 27 ) break;
                   }
                 
@@ -895,7 +895,7 @@ void filesys_manage()
           {
             Serial.println();
             Serial.print(F("\nReally re-format and lose all data (y/n)? "));
-            while( !serial_available() );
+            while( !serial__available() );
             if( serial_read()=='y' )
               dir_set_num_entries(0);
             break;

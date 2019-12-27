@@ -387,7 +387,7 @@ static void serial_replay(byte dev)
     }
 }
 
-bool serial_available()
+bool serial__available()
 {
   // this is the simulator reading serial inputs
   host_check_interrupts();
@@ -635,7 +635,7 @@ byte serial_2sio_in_ctrl(byte dev)
           else
             data &= ~SST_TDRE;
         }
-      else if( host_serial_available_for_write(config_serial_map_sim_to_host(dev)) )
+      else if( host_serial__available_for_write(config_serial_map_sim_to_host(dev)) )
         data |= SST_TDRE;
       else
         data &= ~SST_TDRE;
@@ -757,7 +757,7 @@ byte serial_sio_in_ctrl()
       if( fid>0 && fid<0xff && filesys_is_write(fid) )
         { if( filesys_eof(fid) ) can_send = false; }
       else
-        { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_SIO)) ) can_send = false; }
+        { if( !host_serial__available_for_write(config_serial_map_sim_to_host(CSM_SIO)) ) can_send = false; }
 
       switch( serial_ctrl[CSM_SIO] & (SSC_SIOTP0|SSC_SIOTP1) )
         {
@@ -1044,7 +1044,7 @@ byte serial_acr_in_ctrl()
       if( fid>0 && fid<0xff && filesys_is_write(fid) )
         { if( filesys_eof(fid) ) data |= 0x80; }
       else
-        { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_ACR)) ) data |= 0x80; }
+        { if( !host_serial__available_for_write(config_serial_map_sim_to_host(CSM_ACR)) ) data |= 0x80; }
     }
 
   // do the following only if no regular file is currently open on the ACR

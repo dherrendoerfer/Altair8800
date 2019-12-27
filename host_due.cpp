@@ -1316,7 +1316,7 @@ void host_serial_end(byte i)
     }
 }
 
-int host_serial_available(byte i)
+int host_serial__available(byte i)
 {
   switch( i )
     {
@@ -1334,7 +1334,7 @@ int host_serial_available(byte i)
  return 0;
 }
 
-int host_serial_available_for_write(byte i)
+int host_serial__available_for_write(byte i)
 {
   switch( i )
     {
@@ -1849,6 +1849,7 @@ void host_setup()
   for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
     host_serial_set_receive_callback(i, serial_receive_host_data);
 }
+
 
 
 #endif

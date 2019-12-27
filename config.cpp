@@ -421,26 +421,26 @@ uint32_t config_host_serial_config(uint32_t settings2, byte iface)
   byte v = get_bits(settings2, iface * 5, 5);
   switch( v )
     {
-    case 0x00: return SERIAL_5N1;
-    case 0x01: return SERIAL_5N2;
-    case 0x02: return SERIAL_5E1;
-    case 0x03: return SERIAL_5E2;
-    case 0x04: return SERIAL_5O1;
-    case 0x05: return SERIAL_5O2;
+//    case 0x00: return SERIAL_5N1;
+//    case 0x01: return SERIAL_5N2;
+//    case 0x02: return SERIAL_5E1;
+//    case 0x03: return SERIAL_5E2;
+//    case 0x04: return SERIAL_5O1;
+//    case 0x05: return SERIAL_5O2;
 
-    case 0x08: return SERIAL_6N1;
-    case 0x09: return SERIAL_6N2;
-    case 0x0A: return SERIAL_6E1;
-    case 0x0B: return SERIAL_6E2;
-    case 0x0C: return SERIAL_6O1;
-    case 0x0D: return SERIAL_6O2;
+//    case 0x08: return SERIAL_6N1;
+//    case 0x09: return SERIAL_6N2;
+//    case 0x0A: return SERIAL_6E1;
+//    case 0x0B: return SERIAL_6E2;
+//    case 0x0C: return SERIAL_6O1;
+//    case 0x0D: return SERIAL_6O2;
   
-    case 0x10: return SERIAL_7N1;
-    case 0x11: return SERIAL_7N2;
-    case 0x12: return SERIAL_7E1;
-    case 0x13: return SERIAL_7E2;
+//    case 0x10: return SERIAL_7N1;
+//    case 0x11: return SERIAL_7N2;
+//    case 0x12: return SERIAL_7E1;
+//    case 0x13: return SERIAL_7E2;
     case 0x14: return SERIAL_7O1;
-    case 0x15: return SERIAL_7O2;
+//    case 0x15: return SERIAL_7O2;
 
     case 0x18: return SERIAL_8N1;
     case 0x19: return SERIAL_8N2;
@@ -1729,7 +1729,7 @@ void config_edit_printer()
       else
         set_cursor(r_cmd, 10);
       
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -1814,7 +1814,7 @@ void config_edit_drives()
   while( go )
     {
       set_cursor(r_cmd, 10);
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -1890,7 +1890,7 @@ void config_edit_tdrives()
   while( go )
     {
       set_cursor(r_cmd, 10);
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -1982,7 +1982,7 @@ void config_edit_hdsk()
   while( go )
     {
       set_cursor(r_cmd, 10);
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -2102,7 +2102,7 @@ void config_edit_interrupts()
       else
         set_cursor(r_cmd, 10);
 
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -2183,7 +2183,7 @@ void config_edit_vdm1()
   while( go )
     {
       set_cursor(r_cmd, 10);
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -2287,7 +2287,7 @@ void config_edit_serial_device(byte dev)
       else
         set_cursor(r_cmd, 10);
 
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -2421,7 +2421,7 @@ void config_serial_devices()
       else
         set_cursor(14, 10);
 
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -2493,7 +2493,7 @@ void config_host_serial_details(byte iface)
       else
         set_cursor(r_cmd, 10);
 
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -2596,7 +2596,7 @@ void config_host_serial()
       else
         set_cursor(r_cmd, 10);
 
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -2717,7 +2717,7 @@ void config_memory()
       else
         set_cursor(r_cmd, 10);
 
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
 
@@ -2762,8 +2762,8 @@ void config_memory()
             if( !ok )
               {
                 Serial.print(F("\n\nPress any key to continue..."));
-                while( !serial_available() ); 
-                while( serial_available() ) serial_read();
+                while( !serial__available() ); 
+                while( serial__available() ) serial_read();
               }
 
             break;
@@ -2940,7 +2940,7 @@ void config_edit()
       else
         set_cursor(r_cmd, 10);
 
-      while( !serial_available() ) delay(50);
+      while( !serial__available() ) delay(50);
       c = serial_read();
       if( c>31 && c<127 ) Serial.print(c);
 
@@ -3008,8 +3008,8 @@ void config_edit()
             Serial.println(F("Firmware compiled on: " __DATE__ ", " __TIME__ "\n"));
             host_system_info();
             Serial.print(F("\n\nPress any key to continue..."));
-            while( !serial_available() ); 
-            while( serial_available() ) serial_read();
+            while( !serial__available() ); 
+            while( serial__available() ) serial_read();
             break;
           }
           

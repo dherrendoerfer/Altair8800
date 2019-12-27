@@ -68,7 +68,8 @@ inline byte MEM_READ(uint16_t a)
     {
       host_set_addr_leds(a);
       host_set_status_leds_READMEM();
-      res = host_set_data_leds(MREAD(a));
+      host_set_data_leds(MREAD(a));
+//      res = host_set_data_leds(MREAD(a));
       host_clr_status_led_MEMR();
     }
   return res;

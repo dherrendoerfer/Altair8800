@@ -57,7 +57,7 @@ static bool print_character(byte c, unsigned long delay)
   bool res = false;
 
   byte ser = config_printer_map_to_host_serial();
-  if( host_serial_available_for_write(ser) )
+  if( host_serial__available_for_write(ser) )
     {
       // printer is assigned to serial device and device is ready
       host_serial_write(ser, c);
@@ -413,7 +413,7 @@ byte printer_generic_in_ctrl()
   if( config_printer_realtime() )
     busy = (status & PST_BUFFER_FULL);
   else
-    busy = host_serial_available_for_write(config_printer_map_to_host_serial())==0;
+    busy = host_serial__available_for_write(config_printer_map_to_host_serial())==0;
   
   return config_printer_generic_get_status(busy);
 }
@@ -423,7 +423,7 @@ void printer_generic_interrupt()
 {
   byte ser = config_printer_map_to_host_serial();
   
-  if( !host_serial_available_for_write(ser) )
+  if( !host_serial__available_for_write(ser) )
     {
       // serial output not assigned or not ready => check again in 10ms
       timer_start(TIMER_PRINTER, 1000000/100);

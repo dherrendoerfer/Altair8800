@@ -820,7 +820,7 @@ bool host_serial_ok(byte i)
 }
 
 
-int host_serial_available(byte i)
+int host_serial__available(byte i)
 {
   return i<HOSTPC_NUM_SOCKET_CONN+1 && inp_serial[i]>=0 ? 1 : 0;
 }
@@ -850,7 +850,7 @@ void host_serial_flush(byte i)
 {}
 
 
-int host_serial_available_for_write(byte i)
+int host_serial__available_for_write(byte i)
 {
   if( i==0 )
     return Serial.availableForWrite();

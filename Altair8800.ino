@@ -871,7 +871,7 @@ void read_inputs_serial()
           Serial.print(F(": "));
           addr += disassemble(Mem, addr, true);
           Serial.println();
-          while( !serial_available() ) delay(100);
+          while( !serial__available() ) delay(100);
           go = (serial_read() == 0x20);
         }
       p_regPC = ~regPC;
@@ -898,7 +898,7 @@ void read_inputs_serial()
               Serial.write(MREAD(addr+i)<32 || MREAD(addr+i)>126 ? '.' : MREAD(addr+i));
             }
           Serial.println();
-          while( !serial_available() ) delay(100);
+          while( !serial__available() ) delay(100);
           addr += 16;
           go = (serial_read() == 0x20);
         }

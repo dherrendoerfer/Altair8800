@@ -134,6 +134,7 @@ static char *getFilename(const char *prompt)
           // go through directory and try to find a match
           while( (name=host_filesys_dir_nextfile(dir)) )
             {
+#define strnicmp(a, b, c) strncasecmp(a, b, c)
               if( strnicmp(buf, name, l)==0 )
                 {
                   if( first )
@@ -381,7 +382,7 @@ static void renameFile()
 bool waitKey(bool &lineByLine, char pc = '\n')
 {
   bool wait = false, exit = false;
-  if( serial_available() )
+  if( serial__available() )
     {
       char c = serial_read();
       if( c == ' ' ) 
@@ -394,7 +395,7 @@ bool waitKey(bool &lineByLine, char pc = '\n')
   
   if( wait || (pc=='\n' && lineByLine) )
     {
-      while( !serial_available() ) delay(10);
+      while( !serial__available() ) delay(10);
       char c = serial_read();
       if( c==27 || c==3 )
         exit = true;
@@ -610,7 +611,7 @@ void sd_manager()
       byte c = 0;
       while( !((c>=32 && c<=126) || c==27) )
         {
-          while( !serial_available() ) delay(50);
+          while( !serial__available() ) delay(50);
           c = serial_read();
         }
       if( c>31 && c<127 ) Serial.println((char) c);
