@@ -647,6 +647,16 @@ void host_check_interrupts()
 
 }
 
+void host_serial_interrupts_pause()
+{
+  return;
+}
+void host_serial_interrupts_resume()
+{
+  return;
+}
+
+
 // --------------------------------------------------------------------------------------------------
 
 
