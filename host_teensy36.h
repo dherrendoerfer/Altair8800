@@ -91,12 +91,6 @@ inline uint16_t host_read_status_leds()
   return status_led_local;
 }
 
-// ---------------------------------------------------- update LEDs
-
-void updateDataLEDs();
-void updateAddressLEDs();
-void updateStatusLEDs();
-
 
 // ----------------------------------------------------- address bus
 
@@ -105,7 +99,6 @@ extern volatile uint16_t addr_led_local;
 inline void host_set_addr_leds(uint16_t v)
 {
   addr_led_local = v;
-  updateAddressLEDs();
 }
 
 inline uint16_t host_read_addr_leds()
@@ -120,7 +113,6 @@ extern volatile uint16_t data_led_local;
 inline uint16_t host_set_data_leds(uint16_t v)
 {
   data_led_local = v;
-  updateDataLEDs();
   return v;
 }
 

@@ -52,7 +52,7 @@ volatile boolean switch_change;
 const int numled = 42;
 const int pin = 10;
 
-#define LEDCOLOR 0x444444
+#define LEDCOLOR 0x440000
 #define LEDOFF   0x000000
 
 byte drawingMemory[numled*3];         //  3 bytes per LED
@@ -62,6 +62,10 @@ WS2812Serial leds(numled, displayMemory, drawingMemory, pin, WS2812_GRB);
 volatile uint16_t addr_led_local;
 volatile uint16_t data_led_local;
 volatile uint32_t status_led_local;
+
+static const uint8_t address_to_LED[] = {21,22,23,24,25,26,27,28,29,    31,32,33,34,35,36,    38};
+static const uint8_t data_to_LED[] = {20,19,18,17,16,15,14,13};
+static const uint8_t status_to_LED[] = {9,8,7,6,5,4,3,2,1,0,40,41};
 
 
 /*
@@ -142,7 +146,7 @@ volatile uint32_t status_led_local;
 
 uint16_t host_read_addr_switches()
 {
-  return (switch_bank1 << 16) | switch_bank0;
+  return (switch_bank1<<8) | switch_bank0;
 }
 
 
@@ -651,6 +655,7 @@ void host_serial_interrupts_pause()
 {
   return;
 }
+
 void host_serial_interrupts_resume()
 {
   return;
@@ -662,8 +667,8 @@ void host_serial_interrupts_resume()
 
 static const uint16_t function_switch_id[16] = {0x80,0x8000,0x4000,0x40,0x2000,0x20,0x1000,0x10,0x800,0x8,0x400,0x4,0x200,0x2,0x100,0x1};
 
-uint8_t function_switch_bank2_irq[16] = { INT_SW_AUX2DOWN>>24, 0, 0, INT_SW_CLR>>24, 0, 0, 0, 0 };
-uint8_t function_switch_bank3_irq[16] = { INT_SW_AUX2UP>>24, 0, 0, INT_SW_RESET>>24, 0, 0, 0, INT_SW_STOP>>24};
+static const uint8_t function_switch_bank2_irq[16] = { INT_SW_AUX2DOWN>>24, 0, 0, INT_SW_CLR>>24, 0, 0, 0, 0 };
+static const uint8_t function_switch_bank3_irq[16] = { INT_SW_AUX2UP>>24, 0, 0, INT_SW_RESET>>24, 0, 0, 0, INT_SW_STOP>>24};
 
 bool host_read_function_switch(byte i)
 {
@@ -805,6 +810,35 @@ void host_system_info()
 
 // -----------------------------------------------------------------------------
 
+static void updateAddressLEDs()
+{
+  for (int i=0;i<16;i++) {
+    if (addr_led_local & (1<<i))
+      leds.setPixel(address_to_LED[i],LEDCOLOR);
+    else
+      leds.setPixel(address_to_LED[i],LEDOFF);
+  }
+}
+
+static void updateDataLEDs()
+{
+  for (int i=0;i<8;i++) {
+    if (data_led_local & (1<<i))
+      leds.setPixel(data_to_LED[i],LEDCOLOR);
+    else
+      leds.setPixel(data_to_LED[i],LEDOFF);
+  }
+}
+
+static void updateStatusLEDs()
+{
+  for (int i=0;i<13;i++) {
+    if (status_led_local & (1<<i))
+      leds.setPixel(status_to_LED[i],LEDCOLOR);
+    else
+      leds.setPixel(status_to_LED[i],LEDOFF);
+  }
+}
 
 void panelUpdate()
 {
@@ -884,62 +918,15 @@ void panelUpdate()
   kbd_state++;
   if (kbd_state == 8) {
     kbd_state=0;
-    updateStatusLEDs();
   }
-    leds.show();
+  updateStatusLEDs();
+  updateAddressLEDs();
+  updateDataLEDs();
+  leds.show();
 }
 
 
-void updateAddressLEDs()
-{
-  for (int i=0;i<9;i++) {
-    if (addr_led_local & (1<<i))
-      leds.setPixel(21+i,LEDCOLOR);
-    else
-      leds.setPixel(21+i,LEDOFF);
-  }
-  for (int i=9;i<15;i++) {
-    if (addr_led_local & (1<<i))
-      leds.setPixel(22+i,LEDCOLOR);
-    else
-      leds.setPixel(22+i,LEDOFF);
-  }
-  if (addr_led_local & (1<<15))
-    leds.setPixel(22+16,LEDCOLOR);
-  else
-    leds.setPixel(22+16,LEDOFF);
 
-}
-
-void updateDataLEDs()
-{
-  for (int i=0;i<8;i++) {
-    if (data_led_local & (1<<i))
-      leds.setPixel(20-i,LEDCOLOR);
-    else
-      leds.setPixel(20-i,LEDOFF);
-  }
-}
-
-void updateStatusLEDs()
-{
-  for (int i=0;i<9;i++) {
-    if (status_led_local & (1<<i))
-      leds.setPixel(9-i,LEDCOLOR);
-    else
-      leds.setPixel(9-i,LEDOFF);
-  }
-
-  if (status_led_local & (1<<10)) //HLDA
-      leds.setPixel(40,LEDCOLOR);
-  else
-      leds.setPixel(40,LEDOFF);
-
-  if (status_led_local & (1<<11)) //WAIT
-      leds.setPixel(41,LEDCOLOR);
-  else
-      leds.setPixel(41,LEDOFF);
-}
 
 void host_setup()
 {
@@ -974,7 +961,7 @@ void host_setup()
   analogWrite(A21,4095);
 
   //Start update timer
-  updateTimer.begin(panelUpdate, 5000);
+  updateTimer.begin(panelUpdate, 10000);
 
   //Init non-blocking WS2812b lib
   leds.begin();
@@ -982,9 +969,6 @@ void host_setup()
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
   HLDAGuard hlda;
-  // SdInfo.h in the SdFat library says: Set SCK rate to F_CPU/3 (SPI_DIV3_SPEED) for Due
-  // (84MHZ/3 = 28MHz). If that fails try 4MHz and if that fails too then fall back to 250Khz.
-  // If neither of those work then something is seriously wrong.
   if( SD.begin())
     {
 #if USE_HOST_FILESYS>0
@@ -992,11 +976,12 @@ void host_setup()
       use_sd = true;
 #else
       // not using host file system => open storage (file) for writing
-      use_sd = host_storage_init(true);
+      use_sd = false; //there is no accessible flash on teensy
 #endif
     }
 #endif
 
+  // Give random a spin
   randomSeed(analogRead(A0));
 }
 
