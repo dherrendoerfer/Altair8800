@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------
 // Altair 8800 Simulator
 // Copyright (C) 2017 David Hansel
+// Copyright (C) 2020 Dirk Herrendoerfer for Teensy 3.6 changes
 // -----------------------------------------------------------------------------
 
 #ifndef HOST_H

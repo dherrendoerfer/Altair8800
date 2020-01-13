@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------
 // Altair 8800 Simulator
 // Copyright (C) 2017 David Hansel
+// Copyright (C) 2020 Dirk Herrendoerfer
 // -----------------------------------------------------------------------------
 
 #ifndef HOST_TEENSY_H
@@ -9,23 +10,19 @@
 #include "config.h"
 #include <SdFat.h>
 
-
-// Arduino Due provides a file system (via SD card)
+// Teensy provides a file system (via SD card)
 #define HOST_HAS_FILESYS
 #define HOST_FILESYS_FILE_TYPE File
 #define HOST_FILESYS_DIR_TYPE  File
 
-
 #define MEMSIZE 0x10000
 
-#define HOST_STORAGESIZE due_storagesize
+#define HOST_STORAGESIZE 1024*512
 #define HOST_BUFFERSIZE  0x100
 
 #define HOST_PERFORMANCE_FACTOR 1.0
 
-#define HOST_NUM_SERIAL_PORTS   (2)
-
-extern uint32_t due_storagesize;
+#define HOST_NUM_SERIAL_PORTS   (3)
 
 
 // ------------------------------------------ switches
@@ -54,7 +51,7 @@ extern volatile uint32_t status_led_local;
 #define host_set_status_led_INTE()    status_led_local |= ST_INTE;
 #define host_set_status_led_PROT()    status_led_local |= ST_PROT
 #define host_set_status_led_WAIT()  { status_led_local |= ST_WAIT; status_wait = true; }
-#define host_set_status_led_HLDA()    status_led_local |= ST_HLTA
+#define host_set_status_led_HLDA()    status_led_local |= ST_HLDA
 
 #define host_clr_status_led_INT()     status_led_local &= ~(ST_INT)
 #define host_clr_status_led_WO()      status_led_local &= ~(ST_WO)
@@ -67,7 +64,7 @@ extern volatile uint32_t status_led_local;
 #define host_clr_status_led_INTE()    status_led_local &= ~(ST_INTE);
 #define host_clr_status_led_PROT()    status_led_local &= ~(ST_PROT)
 #define host_clr_status_led_WAIT()  { status_led_local &= ~(ST_WAIT); status_wait = false; }
-#define host_clr_status_led_HLDA()    status_led_local &= ~(ST_HLTA)
+#define host_clr_status_led_HLDA()    status_led_local &= ~(ST_HLDA)
 
 #define host_read_status_led_WAIT()   status_wait
 #define host_read_status_led_M1()     status_led_local & (ST_M1)

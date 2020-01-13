@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------
 // Altair 8800 Simulator
 // Copyright (C) 2017 David Hansel
+// Copyright (C) 2020 Dirk Herrendoerfer
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -17,7 +18,7 @@
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 // -----------------------------------------------------------------------------
 
-#ifdef __MK66FX1M0__
+#ifdef __MK66FX1M0__ // Teensy 3.6
 
 #include <Arduino.h>
 //#include <DueFlashStorage.h>
@@ -29,7 +30,19 @@
 #include "serial.h"
 #include "timer.h"
 #include "dazzler.h"
-//#include "soft_uart.h"
+
+// Altair8800Again! video out
+#include <uVGA.h>
+#define UVGA_180M_360X300
+#include <uVGA_valid_settings.h>
+UVGA_STATIC_FRAME_BUFFER(uvga_fb);
+uVGA uvga;
+
+// Altair8800Again! keyboard
+#include "host_teensy_kbd.h"
+#include "host_teensy_kbd_charmap.h"
+
+#include "host_teensy_vt100.h"
 
 #include <SPI.h>
 #include <SdFat.h>
@@ -39,6 +52,7 @@ static SdFatSdio SD;
 #define min(x, y) ((x)<(y) ? (x) : (y))
 #define max(x, y) ((x)>(y) ? (x) : (y))
 
+// Altair8800Again! LEDs
 #include <WS2812Serial.h>
 
 IntervalTimer updateTimer;
@@ -50,24 +64,33 @@ volatile uint8_t rising_edge_bank2,rising_edge_bank3;
 volatile boolean switch_change;
 
 const int numled = 42;
-const int pin = 10;
+const int LEDpin = 10;
 
-#define LEDCOLOR 0x440000
+#define LEDCOLOR 0x001000
 #define LEDOFF   0x000000
 
 byte drawingMemory[numled*3];         //  3 bytes per LED
 DMAMEM byte displayMemory[numled*12]; // 12 bytes per LED
-WS2812Serial leds(numled, displayMemory, drawingMemory, pin, WS2812_GRB);
+WS2812Serial leds(numled, displayMemory, drawingMemory, LEDpin, WS2812_GRB);
 
 volatile uint16_t addr_led_local;
 volatile uint16_t data_led_local;
 volatile uint32_t status_led_local;
 
+volatile boolean vga_sysmon = true; 
+
+//Define this, if you are using the AIO board. This board has a different LED numbering
+#define AIO 1
+
+#ifdef AIO
+static const uint8_t address_to_LED[] = {18,19,20,21,22,23,24,25,26,    27,28,29,30,31,32,    33};
+static const uint8_t data_to_LED[]    = {17,16,15,14,13,12,11,10};
+static const uint8_t status_to_LED[]  = {9,8,7,6,5,4,3,2,1,0,34,35};
+#else
 static const uint8_t address_to_LED[] = {21,22,23,24,25,26,27,28,29,    31,32,33,34,35,36,    38};
-static const uint8_t data_to_LED[] = {20,19,18,17,16,15,14,13};
-static const uint8_t status_to_LED[] = {9,8,7,6,5,4,3,2,1,0,40,41};
-
-
+static const uint8_t data_to_LED[]    = {20,19,18,17,16,15,14,13};
+static const uint8_t status_to_LED[]  = {9,8,7,6,5,4,3,2,1,0,40,41};
+#endif
 /*
   NOTE:
   Change -Os to -O3 (to switch optimization from size to performance) in:
@@ -166,17 +189,7 @@ private:
   bool m_hlda;
 };
 
-
-// The Due has 512k FLASH memory (addresses 0x00000-0x7ffff).
-// We use 16k (0x4000 bytes) for storage
-// DueFlashStorage address 0 is the first address of the second memory bank,
-// i.e. 0x40000. We add 0x3C000 so we use at 0x7C000-0x7ffff
-// => MUST make sure that our total program size (shown in Arduine IDE after compiling)
-//    is less than 507903 (0x7Bfff)! Otherwise we would overwrite our own program when
-//    saving memory pages.
-//#define FLASH_STORAGE_OFFSET 0x3C000
-//DueFlashStorage dueFlashStorage;
-uint32_t due_storagesize = 0x4000;
+uint32_t sd_storagesize = 512*1024;
 
 #define MOVE_BUFFER_SIZE 1024
 byte moveBuffer[MOVE_BUFFER_SIZE];
@@ -190,11 +203,7 @@ bool host_storage_init(bool write)
 
   storagefile = SD.open("STORAGE.DAT", write ? FILE_WRITE : FILE_READ);
   if( storagefile )
-    {
-      // when using the storage file we can provide more memory than with FLASH
-      due_storagesize = 512*1024;
-      return true;
-    }
+    return true;
   else
     return false;
 }
@@ -211,30 +220,6 @@ void host_storage_invalidate()
   host_storage_close();
   SD.remove("STORAGE.BAK");
   SD.rename("STORAGE.DAT", "STORAGE.BAK");
-}
-
-
-static void host_storage_write_flash(const void *data, uint32_t addr, uint32_t len)
-{
-  uint32_t offset = addr & 3;
-  if( offset != 0)
-    {
-      byte buf[4];
-      uint32_t alignedAddr = addr & 0xfffffffc;
-//      memcpy(buf, dueFlashStorage.readAddress(FLASH_STORAGE_OFFSET + alignedAddr), 4);
-      memcpy(buf+offset, data, min(4-offset, len));
-//      dueFlashStorage.write(FLASH_STORAGE_OFFSET + alignedAddr, buf, 4);
-//      if( offset + len > 4 )
-//        dueFlashStorage.write(FLASH_STORAGE_OFFSET + alignedAddr + 4, ((byte *) data) + (4-offset), len - (4-offset));
-    }
-//  else
-//    dueFlashStorage.write(FLASH_STORAGE_OFFSET + addr, (byte *) data, len);
-}
-
-
-static void host_storage_read_flash(void *data, uint32_t addr, uint32_t len)
-{
-//  memcpy(data, dueFlashStorage.readAddress(FLASH_STORAGE_OFFSET + addr), len);
 }
 
 
@@ -261,16 +246,12 @@ void host_storage_write(const void *data, uint32_t addr, uint32_t len)
 {
   if( storagefile )
     host_storage_write_sd(data, addr, len);
-  else
-    host_storage_write_flash(data, addr, len);
 }
 
 void host_storage_read(void *data, uint32_t addr, uint32_t len)
 {
   if( storagefile )
     host_storage_read_sd(data, addr, len);
-  else
-    host_storage_read_flash(data, addr, len);
 }
 
 
@@ -486,10 +467,6 @@ bool host_filesys_ok()
 
 //------------------------------------------------------------------------------------------------------
 
-
-
-
-
 void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_primary_interface)
 {
   if( iface==1 )
@@ -497,8 +474,14 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
       Serial1.begin(baud, config);
       Serial1.setTimeout(10000);
     }
+  if( iface==2 )
+    {
+      if (set_primary_interface) {
+        vga_sysmon = false;
+        uvga.println("\nMonitor disabled, terminal is primary");
+      }
+    }
 }
-
 
 void host_serial_end(byte i)
 {
@@ -514,6 +497,7 @@ int host_serial__available(byte i)
     {
     case 0: return Serial.available(); break;
     case 1: return Serial1.available(); break;
+    case 2: return uKbdC_available(); break;
     }
 
  return 0;
@@ -525,6 +509,7 @@ int host_serial__available_for_write(byte i)
     {
     case 0: return Serial.availableForWrite(); break;
     case 1: return Serial1.availableForWrite(); break;
+    case 2: return 16; break;
     }
 
  return 0;
@@ -547,6 +532,7 @@ int host_serial_read(byte i)
     {
     case 0: return Serial.read(); break;
     case 1: return Serial1.read(); break;
+    case 2: return uKbdC_read(); break;
     }
 
   return -1;
@@ -558,6 +544,7 @@ void host_serial_flush(byte i)
     {
     case 0: Serial.flush(); break;
     case 1: Serial1.flush(); break;
+    case 2: break;
     }
 }
 
@@ -565,8 +552,14 @@ size_t host_serial_write(byte i, uint8_t b)
 {
   switch( i )
     {
+    //case 0: uVt_write(b);return Serial.write(b); break;
     case 0: return Serial.write(b); break;
     case 1: return Serial1.write(b); break;
+    case 2: 
+            if (vga_sysmon)
+              vga_sysmon = false;
+            return uVt_write(b); 
+            break;
     }
 
   return 0;
@@ -581,8 +574,9 @@ size_t host_serial_write(byte i, const char *buf, size_t n)
       {
         if( Serial.availableForWrite()<n ) 
           n = Serial.availableForWrite();
-        for(a=0; a<n; a++) 
-          Serial.write(buf[a]);
+        for(a=0; a<n; a++) {
+          Serial.write(buf[a]);          
+        }
         return a;
       }
 
@@ -592,6 +586,15 @@ size_t host_serial_write(byte i, const char *buf, size_t n)
           n = Serial1.availableForWrite();
         for(a=0; a<n; a++) 
           Serial1.write(buf[a]);
+        return a;
+      }
+    case 2:
+      {
+        if (vga_sysmon)
+          vga_sysmon = false;
+
+        for(a=0; a<n; a++) 
+          uVt_write(buf[a]);
         return a;
       }
     }
@@ -606,6 +609,7 @@ bool host_serial_ok(byte i)
     {
     case 0: return (bool) Serial; break;
     case 1: return (bool) Serial1; break;
+    case 2: return true; break;
     }
 
   return false;
@@ -618,6 +622,7 @@ const char *host_serial_port_name(byte i)
     {
     case 0: return "USB Programming Port";
     case 1: return "Serial1 (pin 26/27)";
+    case 2: return "VGA Terminal";
     default: return "???";
     }
 }
@@ -629,6 +634,7 @@ bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
     {
     case 0: *min = 600;    *max = 1050000; break;
     case 1: *min = 110;    *max = 1050000; break;
+    case 2: *min = 110;    *max = 1050000; break;
     default: return false;
     }
 
@@ -649,6 +655,9 @@ void host_check_interrupts()
   if( Serial1.available() ) 
     serial_receive_host_data(1, Serial1.read());
 
+  if( uKbdC_available() ) 
+    serial_receive_host_data(2, uKbdC_read());
+
 }
 
 void host_serial_interrupts_pause()
@@ -661,9 +670,26 @@ void host_serial_interrupts_resume()
   return;
 }
 
+// --------------------------------------------------------------------------------------------------
+// Host Terminal functions
+
+void host_vga_write(uint8_t c)
+{
+  uvga.write(c);  
+}
+
+void host_vga_setpos(uint8_t x, uint8_t y)
+{
+  uvga.moveCursor(x, y);
+}
+
+void host_vga_clear()
+{
+  uvga.clear();
+}
+
 
 // --------------------------------------------------------------------------------------------------
-
 
 static const uint16_t function_switch_id[16] = {0x80,0x8000,0x4000,0x40,0x2000,0x20,0x1000,0x10,0x800,0x8,0x400,0x4,0x200,0x2,0x100,0x1};
 
@@ -690,6 +716,7 @@ void do_altair_interrupt_bank3(byte i)
   if (function_switch_bank3_irq[i] != 0)
     altair_interrupt(function_switch_bank3_irq[i]<<24);
 }
+
 
 bool host_read_function_switch_debounced(byte i)
 {
@@ -736,6 +763,7 @@ void host_reset_function_switch_state()
   rising_edge_bank2 = 0;
   rising_edge_bank3 = 0;
 }
+
 
 uint8_t host_read_sense_switches()
 {
@@ -798,7 +826,7 @@ void host_system_info()
     { Serial.print(" (card error: 0x"); Serial.print(SD.card()->errorCode(), HEX); Serial.println(")"); }
 #else
   Serial.print(storagefile ? "STORAGE.DAT file on SD card" : "flash memory");
-  Serial.print(" ("); Serial.print(due_storagesize / 1024); Serial.print("K)");
+  Serial.print(" ("); Serial.print(sd_storagesize / 1024); Serial.print("K)");
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
   if( SD.card()->errorCode()!=SD_CARD_ERROR_NONE )
     { Serial.print(" (SD card error: 0x"); Serial.print(SD.card()->errorCode(), HEX); Serial.print(")"); }
@@ -807,16 +835,16 @@ void host_system_info()
 #endif
 }
 
-
 // -----------------------------------------------------------------------------
+
 
 static void updateAddressLEDs()
 {
   for (int i=0;i<16;i++) {
     if (addr_led_local & (1<<i))
-      leds.setPixel(address_to_LED[i],LEDCOLOR);
+      leds.setPixel(address_to_LED[i], LEDCOLOR);
     else
-      leds.setPixel(address_to_LED[i],LEDOFF);
+      leds.setPixel(address_to_LED[i], LEDOFF);
   }
 }
 
@@ -839,6 +867,96 @@ static void updateStatusLEDs()
       leds.setPixel(status_to_LED[i],LEDOFF);
   }
 }
+
+// -----------------------------------------------------------------------------
+void monitor_panel()
+{
+  uvga.clear();
+  uvga.println("                ALTAIR 8800");
+  uvga.println("     ----STATUS-----      ------DATA-----");
+  uvga.println("");
+  uvga.println(" I P M I M O H S I W      D D D D D D D D");
+  uvga.println(" N R E N 1 U L T N O      7 6 5 4 3 2 1 0");
+  uvga.println(" T O M P   T T A T");
+  uvga.println("   T R       A C");
+  uvga.println("               K ");
+  uvga.println("");
+  uvga.println("        --------------ADDRESS------------");
+  uvga.println("");
+  uvga.println(" W H    A A A A A A A A   A A A A A A A A");
+  uvga.println(" A L    1 1 1 1 1 1 9 8   7 6 5 4 3 2 1 0");
+  uvga.println(" I D    5 4 3 2 1 0");
+  uvga.println(" T A");
+  uvga.println("");
+  uvga.println("        -------------SWITCHES------------");
+  uvga.println("");
+  uvga.println("        S S S S S S S S   S S S S S S S S");
+  uvga.println("        1 1 1 1 1 1 9 8   7 6 5 4 3 2 1 0");
+  uvga.println("        5 4 3 2 1 0");
+}
+
+static void m_led(uint8_t posx, uint8_t posy, uint16_t on)
+{
+  uint16_t x = 3 + 8*posx;  
+  uint16_t y = 3 + 8*posy;
+
+  if (on) {
+    uvga.drawPixel(x,y,0xE0);
+    uvga.drawPixel(x+1,y,0xE0);
+    uvga.drawPixel(x,y+1,0xE0);
+    uvga.drawPixel(x+1,y+1,0xE0);
+    uvga.drawPixel(x+2,y,0xE0);
+    uvga.drawPixel(x+2,y+1,0xE0);
+  }
+  else {
+    uvga.drawPixel(x,y,0x00);
+    uvga.drawPixel(x+1,y,0x00);
+    uvga.drawPixel(x,y+1,0x00);
+    uvga.drawPixel(x+1,y+1,0x00);
+    uvga.drawPixel(x+2,y,0x00);
+    uvga.drawPixel(x+2,y+1,0x00);
+  }
+}
+static const uint8_t m_status_to_LED[] = {19,17,15,13,11,9,7,5,3,1,3,1};
+static const uint8_t m_address_to_LED[] = {40,38,36,34,32,30,28,26,  22,20,18,16,14,12,10,8};
+
+static void m_led_update_status_LEDs()
+{
+  uint8_t i;
+  for (i=0;i<10;i++)
+    m_led(m_status_to_LED[i], 2, status_led_local & (1<<i));
+  for (i=10;i<13;i++)
+    m_led(m_status_to_LED[i], 10, status_led_local & (1<<i));
+
+  for (i=0;i<8;i++) {
+    m_led(m_address_to_LED[i], 2, data_led_local & (1<<i));
+    m_led(m_address_to_LED[i], 10, addr_led_local & (1<<i));
+    m_led(m_address_to_LED[i+8], 10, addr_led_local & (1<<(i+8)));
+  }
+
+}
+static void m_led_update_switch_LEDs()
+{
+  uint8_t i;
+  for (i=0;i<8;i++) {
+    m_led(m_address_to_LED[i], 17, switch_bank0 & (1<<i));
+    m_led(m_address_to_LED[i+8], 17, switch_bank1 & (1<<i));
+  }
+}
+
+// -----------------------------------------------------------------------------
+
+// ---- The panel works differently with Teensy: since we don't have enough pins and
+//   ports to connect every LED and SWITCH, we multiplex the switches and use addressable
+//   LEDs to display. This is being driven by a timer-fed interrupt
+//   The pannel uses a 4x8 matrix to read the SWITCHES:
+//   4 rows are selected and pulled to ground one-by-one and connect commonly to 8 switches.
+//   8 switches are connected to 8 input ports on the teensy. These are read when a row is
+//   selected. Diodes must be used on each line from switch to port to prevent ghosting.
+//   ROW1 is ADDRESS0-7
+//   ROW2 is ADDRESS8-15 
+//   ROW3 is FUNCTION SWITCHES DOWN (AUX2, AUX1, PROTECT, RESET, DEPOSIT, EXAMINE, SINGLE_STEP, STOP)
+//   ROW4 is FUNCTION SWITCHES UP 
 
 void panelUpdate()
 {
@@ -892,7 +1010,6 @@ void panelUpdate()
         state_bank2 = switch_bank2;
         switch_change = true;  
       }
-
       break;
     case 6: //ROW 2 LOW
       digitalWriteFast(3,HIGH); digitalWriteFast(4,LOW);
@@ -917,25 +1034,90 @@ void panelUpdate()
   }  
   kbd_state++;
   if (kbd_state == 8) {
+    uint8_t code;
     kbd_state=0;
+
+    //read the keyboard, then send the event to the charmapper
+    //if an event is completed it becomes available in uKbdC_available();
+    if (uKbd_available()){
+      code = uKbd_read();
+      uKbdC_send_scancode(code);
+    }
+    if (vga_sysmon)
+      m_led_update_switch_LEDs();
+
+    return;
   }
+
+  //This is the update for every cycle
   updateStatusLEDs();
   updateAddressLEDs();
   updateDataLEDs();
   leds.show();
+  if(vga_sysmon)
+    m_led_update_status_LEDs();
 }
 
+// Make sure we don't have an object in the middle of the 
+// boundary change
+bool reserveSramBoundary() {
+    void* locks[1000];
+    uint8_t ct = 0;
 
+    while(ct<1000) {
+      locks[ct] = malloc(64);
 
+      if ((uintptr_t)locks[ct] >= 0x20000000u ){
+        for (int i=0; i<ct; i++){
+          free(locks[i]);
+        }
+        return true;
+        break;
+      }
+
+      ct++;
+      delay(50);
+    }
+
+    for (int i=0; i<ct; i++){
+      free(locks[i]);
+    }
+
+    return false;
+}
 
 void host_setup()
 {
+  int ret;
+
+  if(reserveSramBoundary())
+  {
+    if (Serial) Serial.println("mem-quirk");    
+  }
+  
+  //Keyboard init
+  if (uKbd_start()){
+    if (Serial) Serial.println("no keyboard");
+  }
+
+  //VGA init
+  uvga.set_static_framebuffer(uvga_fb);
+  ret=uvga.begin(&modeline);
+  if (ret != 0) {
+    if (Serial) Serial.println("VGA init failed.");  
+  }
+  else {
+    delay(100);
+    monitor_panel();
+  }
+
   //On-board LED
   pinMode(13,OUTPUT);
   
   //Reroute serial1
   pinMode(26,OUTPUT);
-  pinMode(27,INPUT_PULLUP);
+  pinMode(27,INPUT);
+  Serial1.end(); //Stop, so it can be rerouted
   Serial1.setTX(26);
   Serial1.setRX(27);
 
@@ -969,21 +1151,14 @@ void host_setup()
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
   HLDAGuard hlda;
-  if( SD.begin())
-    {
-#if USE_HOST_FILESYS>0
-      // storing configurations etc directly on SD card
-      use_sd = true;
-#else
-      // not using host file system => open storage (file) for writing
-      use_sd = false; //there is no accessible flash on teensy
-#endif
-    }
+  if( SD.begin()) {
+    // storing configurations etc directly on SD card
+    use_sd = host_storage_init(true);
+  }
 #endif
 
   // Give random a spin
   randomSeed(analogRead(A0));
 }
-
 
 #endif

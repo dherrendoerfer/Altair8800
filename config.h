@@ -34,7 +34,7 @@
 // Enables throttling of CPU speed. This only makes sense to enable
 // on the Due since the Mega is too slow anyways and the throttling 
 // checks would only reduce performance further.
-#define USE_THROTTLE 0
+#define USE_THROTTLE 1
 
 
 // Maximum number of ROMs that can be added. 
