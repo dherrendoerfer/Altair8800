@@ -20,6 +20,11 @@
 
 #ifdef __MK66FX1M0__ // Teensy 3.6
 
+
+//Define this, if you are using the AIO board. This board has a different LED numbering
+#define AIO 1
+
+
 #include <Arduino.h>
 //#include <DueFlashStorage.h>
 #include "Altair8800.h"
@@ -47,6 +52,12 @@ uVGA uvga;
 #include <SPI.h>
 #include <SdFat.h>
 
+extern "C" char* sbrk(int incr);
+int FreeRam() {
+  char top;
+  return &top - reinterpret_cast<char*>(sbrk(0));
+}
+
 static SdFatSdio SD;
 
 #define min(x, y) ((x)<(y) ? (x) : (y))
@@ -63,7 +74,11 @@ volatile uint8_t state_bank0,state_bank1,state_bank2,state_bank3;
 volatile uint8_t rising_edge_bank2,rising_edge_bank3;
 volatile boolean switch_change;
 
-const int numled = 42;
+#ifdef AIO
+const int numled = 48; //(need multiples of 8!!!)
+#else
+const int numled = 40; //(need multiples of 8!!!)
+#endif
 const int LEDpin = 10;
 
 #define LEDCOLOR 0x001000
@@ -79,8 +94,6 @@ volatile uint32_t status_led_local;
 
 volatile boolean vga_sysmon = true; 
 
-//Define this, if you are using the AIO board. This board has a different LED numbering
-#define AIO 1
 
 #ifdef AIO
 static const uint8_t address_to_LED[] = {18,19,20,21,22,23,24,25,26,    27,28,29,30,31,32,    33};
@@ -91,6 +104,11 @@ static const uint8_t address_to_LED[] = {21,22,23,24,25,26,27,28,29,    31,32,33
 static const uint8_t data_to_LED[]    = {20,19,18,17,16,15,14,13};
 static const uint8_t status_to_LED[]  = {9,8,7,6,5,4,3,2,1,0,40,41};
 #endif
+
+// Include audio tape support 
+#include "host_teensy_tape.h"
+
+
 /*
   NOTE:
   Change -Os to -O3 (to switch optimization from size to performance) in:
@@ -174,6 +192,7 @@ uint16_t host_read_addr_switches()
 
 
 //------------------------------------------------------------------------------------------------------
+
 
 
 //------------------------------------------------------------------------------------------------------
@@ -481,6 +500,11 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
         uvga.println("\nMonitor disabled, terminal is primary");
       }
     }
+  if( iface==3 )
+    {
+      //Tape
+      
+    }
 }
 
 void host_serial_end(byte i)
@@ -498,6 +522,7 @@ int host_serial__available(byte i)
     case 0: return Serial.available(); break;
     case 1: return Serial1.available(); break;
     case 2: return uKbdC_available(); break;
+    case 3: return a_serial_available(); break;
     }
 
  return 0;
@@ -510,6 +535,7 @@ int host_serial__available_for_write(byte i)
     case 0: return Serial.availableForWrite(); break;
     case 1: return Serial1.availableForWrite(); break;
     case 2: return 16; break;
+    case 3: return a_serial_write_avail(); break;
     }
 
  return 0;
@@ -533,6 +559,7 @@ int host_serial_read(byte i)
     case 0: return Serial.read(); break;
     case 1: return Serial1.read(); break;
     case 2: return uKbdC_read(); break;
+    case 3: return a_serial_read(); break;
     }
 
   return -1;
@@ -545,6 +572,7 @@ void host_serial_flush(byte i)
     case 0: Serial.flush(); break;
     case 1: Serial1.flush(); break;
     case 2: break;
+    case 3: break; 
     }
 }
 
@@ -555,11 +583,11 @@ size_t host_serial_write(byte i, uint8_t b)
     //case 0: uVt_write(b);return Serial.write(b); break;
     case 0: return Serial.write(b); break;
     case 1: return Serial1.write(b); break;
-    case 2: 
-            if (vga_sysmon)
+    case 2: if (vga_sysmon)
               vga_sysmon = false;
             return uVt_write(b); 
             break;
+    case 3: return a_serial_write(b); break;
     }
 
   return 0;
@@ -597,11 +625,18 @@ size_t host_serial_write(byte i, const char *buf, size_t n)
           uVt_write(buf[a]);
         return a;
       }
+    case 3:
+      {
+        if( a_serial_write_avail()<n ) 
+          n = a_serial_write_avail();
+        for(a=0; a<n; a++) 
+          a_serial_write(buf[a]);
+        return a;
+      }
     }
 
   return 0;
 }
-
 
 bool host_serial_ok(byte i)
 {
@@ -610,6 +645,7 @@ bool host_serial_ok(byte i)
     case 0: return (bool) Serial; break;
     case 1: return (bool) Serial1; break;
     case 2: return true; break;
+    case 3: return true; break;
     }
 
   return false;
@@ -623,6 +659,7 @@ const char *host_serial_port_name(byte i)
     case 0: return "USB Programming Port";
     case 1: return "Serial1 (pin 26/27)";
     case 2: return "VGA Terminal";
+    case 3: return "Teensy Tape emulation";
     default: return "???";
     }
 }
@@ -635,6 +672,7 @@ bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
     case 0: *min = 600;    *max = 1050000; break;
     case 1: *min = 110;    *max = 1050000; break;
     case 2: *min = 110;    *max = 1050000; break;
+    case 3: *min = 300;    *max = 300; break;
     default: return false;
     }
 
@@ -657,6 +695,9 @@ void host_check_interrupts()
 
   if( uKbdC_available() ) 
     serial_receive_host_data(2, uKbdC_read());
+
+  if( a_serial_available() ) 
+    serial_receive_host_data(3, a_serial_read());
 
 }
 
@@ -1034,17 +1075,11 @@ void panelUpdate()
   }  
   kbd_state++;
   if (kbd_state == 8) {
-    uint8_t code;
     kbd_state=0;
 
-    //read the keyboard, then send the event to the charmapper
-    //if an event is completed it becomes available in uKbdC_available();
-    if (uKbd_available()){
-      code = uKbd_read();
-      uKbdC_send_scancode(code);
+    if (vga_sysmon) {
+      m_led_update_switch_LEDs();      
     }
-    if (vga_sysmon)
-      m_led_update_switch_LEDs();
 
     return;
   }
@@ -1056,45 +1091,63 @@ void panelUpdate()
   leds.show();
   if(vga_sysmon)
     m_led_update_status_LEDs();
+
+  //read the keyboard, then send the event to the charmapper
+  //if an event is completed it becomes available in uKbdC_available();
+  if (uKbd_available()){
+    uint8_t code;
+    code = uKbd_read();
+    uKbdC_send_scancode(code);
+  }
+  
+  //Tape DEBUG
+//  if ( a_serial_available())
+//    Serial.print((char)a_serial_read());
+
 }
+
+// ----------------------------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------------------------
 
 // Make sure we don't have an object in the middle of the 
 // boundary change
+/*
 bool reserveSramBoundary() {
-    void* locks[1000];
-    uint8_t ct = 0;
+  void* locks[1000];
+  uint8_t ct = 0;
 
-    while(ct<1000) {
-      locks[ct] = malloc(64);
-
-      if ((uintptr_t)locks[ct] >= 0x20000000u ){
-        for (int i=0; i<ct; i++){
-          free(locks[i]);
-        }
-        return true;
-        break;
+  while(ct<1000) {
+    locks[ct] = malloc(64);
+  
+    if ((uintptr_t)locks[ct] >= 0x20000000u ){
+      for (int i=0; i<ct; i++){
+        free(locks[i]);
       }
-
-      ct++;
-      delay(50);
+      return true;
+      break;
     }
+    ct++;
+    delay(50);
+  }
 
-    for (int i=0; i<ct; i++){
-      free(locks[i]);
-    }
+  for (int i=0; i<ct; i++){
+    free(locks[i]);
+  }
 
-    return false;
+  return false;
 }
-
+*/
 void host_setup()
 {
   int ret;
-
+/*
   if(reserveSramBoundary())
   {
     if (Serial) Serial.println("mem-quirk");    
   }
-  
+*/
   //Keyboard init
   if (uKbd_start()){
     if (Serial) Serial.println("no keyboard");
@@ -1107,7 +1160,6 @@ void host_setup()
     if (Serial) Serial.println("VGA init failed.");  
   }
   else {
-    delay(100);
     monitor_panel();
   }
 
@@ -1139,15 +1191,24 @@ void host_setup()
   pinMode(32,INPUT_PULLUP);
 
   //Analog/Sound out
-  pinMode(21,OUTPUT);
-  analogWrite(A21,4095);
+  analogWriteResolution(12);
+  analogWrite(A21,2048);
+
+  if (Serial) Serial.println("PRE Timer");
 
   //Start update timer
   updateTimer.begin(panelUpdate, 10000);
 
+  if (Serial) Serial.println("PRE Tape");
+  //Start tape update timer
+  tapeTimer.begin(tapeUpdate, 50);
+  tapeTimer.priority(32);
+
+  if (Serial) Serial.println("PRE LED");
   //Init non-blocking WS2812b lib
   leds.begin();
 
+  if (Serial) Serial.println("PRE SD");
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
   HLDAGuard hlda;
@@ -1158,7 +1219,10 @@ void host_setup()
 #endif
 
   // Give random a spin
-  randomSeed(analogRead(A0));
+  randomSeed(analogRead(A22));
+
+  if (Serial){ Serial.print("Free Mem:");Serial.println(FreeRam());}
+
 }
 
 #endif

@@ -186,7 +186,7 @@ static uint8_t uKbdC_mod_controls = 0;
 static uint8_t uKbdC_do_break = 0;
 static uint8_t uKbdC_do_modify = 0;
 
-static uint8_t uKbdC_buffer[32]; 
+static uint8_t uKbdC_buffer[16]; 
 static uint8_t uKbdC_ptr_floor = 0;
 static uint8_t uKbdC_ptr_ceil = 0;
 
@@ -425,7 +425,7 @@ static uint8_t uKbdC_process_code(uint8_t code, const uKbdC_PS2Keymap_t &map = P
       key = uKbdC_num_mod(code);
       if (key) {
         uKbdC_buffer[uKbdC_ptr_ceil++] = key;
-        uKbdC_ptr_ceil = uKbdC_ptr_ceil & 0x1F; 
+        uKbdC_ptr_ceil = uKbdC_ptr_ceil & 0xF; 
         return(1);
       }
     }
@@ -448,7 +448,7 @@ static uint8_t uKbdC_process_code(uint8_t code, const uKbdC_PS2Keymap_t &map = P
 
     if (key) {
       uKbdC_buffer[uKbdC_ptr_ceil++] = key;
-      uKbdC_ptr_ceil = uKbdC_ptr_ceil & 0x1F; 
+      uKbdC_ptr_ceil = uKbdC_ptr_ceil & 0xF; 
       return(1);
     }
   }
@@ -489,7 +489,7 @@ uint8_t uKbdC_read()
 
   if (uKbdC_ptr_ceil != uKbdC_ptr_floor) {
     ret = uKbdC_buffer[uKbdC_ptr_floor++];
-    uKbdC_ptr_floor = uKbdC_ptr_floor & 0x1F;
+    uKbdC_ptr_floor = uKbdC_ptr_floor & 0xF;
     return ret;
   }
   return(0);

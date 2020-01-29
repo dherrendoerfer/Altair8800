@@ -22,7 +22,7 @@
 
 #define HOST_PERFORMANCE_FACTOR 1.0
 
-#define HOST_NUM_SERIAL_PORTS   (3)
+#define HOST_NUM_SERIAL_PORTS   (4)
 
 
 // ------------------------------------------ switches

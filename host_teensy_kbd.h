@@ -21,7 +21,7 @@
 /* Note: This is just for the Altair8800Again shield 
  *       the pins for clk and data are routed through a driver  */
 
-static volatile uint8_t uKbd_buffer[32]; 
+static volatile uint8_t uKbd_buffer[16]; 
 static volatile uint8_t uKbd_ptr_floor = 0;
 static volatile uint8_t uKbd_ptr_ceil = 0;
 
@@ -129,7 +129,7 @@ void uKBD_irq()
   case 10: // Stop bit
     if (uKbd_devdata) {
       uKbd_buffer[uKbd_ptr_ceil++] = uKbd_scancode;
-      uKbd_ptr_ceil = uKbd_ptr_ceil & 0x1F; 
+      uKbd_ptr_ceil = uKbd_ptr_ceil & 0xF; 
     }
     else {
       uKbd_stopbit_err++;  
@@ -220,7 +220,7 @@ static uint8_t uKbd_send_byte(uint8_t data)
 uint8_t uKbd_available()
 {
   if (uKbd_ptr_ceil < uKbd_ptr_floor)
-    return(32 - uKbd_ptr_floor + uKbd_ptr_ceil);
+    return(16 - uKbd_ptr_floor + uKbd_ptr_ceil);
   else
     return(uKbd_ptr_ceil - uKbd_ptr_floor);
 }
@@ -231,13 +231,13 @@ uint8_t uKbd_read()
 
   if (uKbd_ptr_ceil != uKbd_ptr_floor) {
     ret = uKbd_buffer[uKbd_ptr_floor++];
-    uKbd_ptr_floor = uKbd_ptr_floor & 0x1F;
+    uKbd_ptr_floor = uKbd_ptr_floor & 0xF;
     return ret;
   }
   
   while (uKbd_ptr_ceil == uKbd_ptr_floor);
   ret = uKbd_buffer[uKbd_ptr_floor++];
-  uKbd_ptr_floor = uKbd_ptr_floor & 0x1F;
+  uKbd_ptr_floor = uKbd_ptr_floor & 0xF;
   return ret;
 }
 
