@@ -26,7 +26,8 @@
 word mem_ram_limit = 0xFFFF, mem_protected_limit = 0xFFFF;
 byte mem_protected_flags[32];
 
-byte Mem[MEMSIZE];
+//byte Mem[MEMSIZE];
+byte *Mem;
 
 
 byte MEM_READ_STEP(uint16_t a)
@@ -285,6 +286,7 @@ uint16_t mem_get_ram_limit_usr()
 
 void mem_setup()
 {
+  Mem=(byte*)malloc(MEMSIZE);
   memset(mem_protected_flags, 0, 32);
   mem_ram_limit = MEMSIZE-1;
   for(uint32_t p = MEMSIZE; p < 0x10000; p += 0x100 )
