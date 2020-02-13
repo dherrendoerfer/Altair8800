@@ -18,7 +18,7 @@
 
 // The emulated Z80 runs at 2MHz (true Z80, not Z80a or Z80b)
 #define CPU_CLOCK_I8080 2000
-#define CPU_CLOCK_Z80   2000
+#define CPU_CLOCK_Z80   4000
 
 
 extern union unionAF

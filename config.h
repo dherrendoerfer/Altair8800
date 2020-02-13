@@ -11,7 +11,7 @@
 // 0 = use Intel 8080
 // 1 = use Zilog Z80  (uses 20 bytes more RAM than i8080)
 // 2 = allow switching between i8080 and z80 via configuration (uses more RAM and flash memory)
-#define USE_Z80 0
+#define USE_Z80 2
 
 
 // If this is set to 1 and the host provides a file system (i.e. an SD card is connected)

@@ -75,18 +75,18 @@ volatile uint8_t rising_edge_bank2,rising_edge_bank3;
 volatile boolean switch_change;
 
 #ifdef AIO
-const int numled = 48; //(need multiples of 8!!!)
+#define NUMBER_OF_LEDS 36 
 #else
-const int numled = 40; //(need multiples of 8!!!)
+#define NUMBER_OF_LEDS 48
 #endif
-const int LEDpin = 10;
+#define LEDS_PIN 10
 
-#define LEDCOLOR 0x001000
+#define LEDCOLOR 0x100000
 #define LEDOFF   0x000000
 
-byte drawingMemory[numled*3];         //  3 bytes per LED
-DMAMEM byte displayMemory[numled*12]; // 12 bytes per LED
-WS2812Serial leds(numled, displayMemory, drawingMemory, LEDpin, WS2812_GRB);
+byte drawingMemory[NUMBER_OF_LEDS*3];         //  3 bytes per LED
+DMAMEM byte displayMemory[NUMBER_OF_LEDS*12]; // 12 bytes per LED
+WS2812Serial leds(NUMBER_OF_LEDS, displayMemory, drawingMemory, LEDS_PIN, WS2812_GRB);
 
 volatile uint16_t addr_led_local;
 volatile uint16_t data_led_local;
@@ -189,10 +189,6 @@ uint16_t host_read_addr_switches()
 {
   return (switch_bank1<<8) | switch_bank0;
 }
-
-
-//------------------------------------------------------------------------------------------------------
-
 
 
 //------------------------------------------------------------------------------------------------------
@@ -477,11 +473,6 @@ bool host_filesys_ok()
 {
   return use_sd;
 }
-
-
-//------------------------------------------------------------------------------------------------------
-
-
 
 
 //------------------------------------------------------------------------------------------------------
@@ -1157,7 +1148,8 @@ void host_setup()
   uvga.set_static_framebuffer(uvga_fb);
   ret=uvga.begin(&modeline);
   if (ret != 0) {
-    if (Serial) Serial.println("VGA init failed.");  
+    if (Serial) Serial.println("VGA init failed.");
+    vga_sysmon = false;
   }
   else {
     monitor_panel();
