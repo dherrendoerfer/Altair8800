@@ -56,12 +56,6 @@
 #error "Maximum number of host serial interfaces supported is 5"
 #endif
 
-#if USE_SECOND_2SIO>0
-#define NUM_SERIAL_DEVICES 6
-#else
-#define NUM_SERIAL_DEVICES 4
-#endif
-
 // config_flags:
 // vvvvvvvv mmmpphrt ttttRRRR dVCDIPFT
 // T = Throttle
@@ -127,6 +121,8 @@ uint32_t config_serial_settings2, new_config_serial_settings2;
 // VV   = 88-SIO board version (0=rev0, 1=rev1, 2=Cromemco)
 uint32_t config_serial_device_settings[NUM_SERIAL_DEVICES];
 
+// map emulated device (SIO/2SIO etc.) to host serial port number
+byte config_serial_sim_to_host[NUM_SERIAL_DEVICES];
 
 // masks defining which interrupts (INT_*) are at which vector interrupt levels
 uint32_t config_interrupt_vi_mask[8];
@@ -395,11 +391,6 @@ byte config_map_device_to_host_interface(byte s)
     return 0xff;
 }
 
-byte config_serial_map_sim_to_host(byte dev)
-{
-  return config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
-}
-
 bool config_serial_realtime(byte dev)
 {
   return get_bits(config_serial_device_settings[dev], 16, 1) ? true : false;
@@ -421,27 +412,23 @@ uint32_t config_host_serial_config(uint32_t settings2, byte iface)
   byte v = get_bits(settings2, iface * 5, 5);
   switch( v )
     {
-//    case 0x00: return SERIAL_5N1;
-//    case 0x01: return SERIAL_5N2;
-//    case 0x02: return SERIAL_5E1;
-//    case 0x03: return SERIAL_5E2;
-//    case 0x04: return SERIAL_5O1;
-//    case 0x05: return SERIAL_5O2;
+#ifndef HOST_TEENSY_H // Teensy does not define these constants
+    case 0x00: return SERIAL_5N1;
+    case 0x01: return SERIAL_5N2;
+    case 0x02: return SERIAL_5E1;
+    case 0x03: return SERIAL_5E2;
+    case 0x04: return SERIAL_5O1;
+    case 0x05: return SERIAL_5O2;
 
-//    case 0x08: return SERIAL_6N1;
-//    case 0x09: return SERIAL_6N2;
-//    case 0x0A: return SERIAL_6E1;
-//    case 0x0B: return SERIAL_6E2;
-//    case 0x0C: return SERIAL_6O1;
-//    case 0x0D: return SERIAL_6O2;
-  
-//    case 0x10: return SERIAL_7N1;
-//    case 0x11: return SERIAL_7N2;
-//    case 0x12: return SERIAL_7E1;
-//    case 0x13: return SERIAL_7E2;
+    case 0x08: return SERIAL_6N1;
+    case 0x09: return SERIAL_6N2;
+    case 0x0A: return SERIAL_6E1;
+    case 0x0B: return SERIAL_6E2;
+    case 0x0C: return SERIAL_6O1;
+    case 0x0D: return SERIAL_6O2;
     case 0x14: return SERIAL_7O1;
-//    case 0x15: return SERIAL_7O2;
-
+    case 0x15: return SERIAL_7O2;
+#endif
     case 0x18: return SERIAL_8N1;
     case 0x19: return SERIAL_8N2;
     case 0x1A: return SERIAL_8E1;
@@ -965,9 +952,13 @@ static void apply_host_serial_settings(uint32_t settings, uint32_t settings2)
   config_serial_settings  = settings;
   config_serial_settings2 = settings2;
   for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
-    host_serial_setup(i, config_host_serial_baud_rate(i), 
+    host_serial_setup(i, config_host_serial_baud_rate(i),
                       config_host_serial_config(settings2, i),
                       config_host_serial_primary()==i);
+
+  // mapping for serial devices can have changed if primary serial was changed
+  for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
+    config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
 }
 
 
@@ -1097,43 +1088,44 @@ static uint32_t toggle_serial_flag_backspace(uint32_t settings)
 }
 
 
-static byte find_floppy_image(byte n, bool up)
+static byte find_floppy_image(byte n, bool up, byte max = 0xff)
 {
-  byte i=n;
+  int i=n;
+
   do
     {
       if( drive_get_image_filename(i)!=NULL ) return i;
       if( up ) i++; else i--;
     }
-  while( up && i>0 || !up && i<0xff );
+  while( i>=0 && i<=max );
 
   return 0;
 }
 
 
-static byte find_tfloppy_image(byte n, bool up)
+static byte find_tfloppy_image(byte n, bool up, byte max = 0xff)
 {
-  byte i=n;
+  int i=n;
   do
     {
       if( tdrive_get_image_filename(i)!=NULL ) return i;
       if( up ) i++; else i--;
     }
-  while( up && i>0 || !up && i<0xff );
+  while( i>=0 && i<=max );
 
   return 0;
 }
 
 
-static byte find_hdsk_image(byte n, bool up)
+static byte find_hdsk_image(byte n, bool up, byte max = 0xff)
 {
-  byte i=n;
+  int i=n;
   do
     {
       if( hdsk_get_image_filename(i)!=NULL ) return i;
       if( up ) i++; else i--;
     }
-  while( up && i>0 || !up && i<0xff );
+  while( i>=0 && i<=max );
 
   return 0;
 }
@@ -1146,48 +1138,50 @@ static void toggle_aux1_program_up(byte row, byte col)
 
   while( !found )
     {
+      b++;
       if( !found && (b & 0xC0)==0x00 )
         {
           // look for next integrated program
-          b = b + 1;
-          if( prog_get_name(b) )
+          if( b>0 && prog_get_name(b) )
             found = true;
-          else
-            b = 0x40;
+          else if( b==0x3F )
+            b = 0x41;
         }
 
       if( !found && (b & 0xC0)==0x40 )
         {
 #if NUM_TDRIVES>0
           // look for next tarbell floppy image
-          b = find_tfloppy_image((b & 0x3f)+1, true) | 0x40;
+          b = find_tfloppy_image(b & 0x3f, true, 0x3f) | 0x40;
           if( b>0x40 ) 
             found = true;
           else
 #endif
-            b = 0x80;
+            b = 0x81;
         }
 
       if( !found && (b & 0xC0)==0x80 )
         {
 #if NUM_DRIVES>0
           // look for next floppy disk image
-          b = find_floppy_image((b & 0x3f)+1, true) | 0x80;
+          b = find_floppy_image(b & 0x3f, true, 0x3f) | 0x80;
           if( b>0x80 ) 
             found = true;
           else
 #endif
-            b = 0xC0;
+            b = 0xC1;
         }
       
       if( !found && (b & 0xC0)==0xC0 )
         {
+#if NUM_HDSK_UNITS>0
           // look for next hard disk image
-          b = find_hdsk_image((b & 0x3f)+1, true) | 0xC0;
+          b = find_hdsk_image(b & 0x3f, true, 0x3f) | 0xC0;
           if( b>0xC0 ) 
             found = true;
           else
-            b = 0;
+#endif
+            b = 0x00;
         }
     }
 
@@ -1203,41 +1197,47 @@ static void toggle_aux1_program_down(byte row, byte col)
 
   while( !found )
     {
-      if( !found && (b & 0xC0)==0xC0 )
+      b--;
+	  if( !found && (b & 0xC0)==0xC0 )
         {
           // look for previous hard disk image
-          b = find_hdsk_image((b & 0x3f)-1, false) | 0xC0;
+#if NUM_HDSK_UNITS>0
+		  b = find_hdsk_image(b & 0x3f, false, 0x3f) | 0xC0;
           if( b>0xC0 ) 
             found = true;
           else
+#endif
             b = 0xBF;
         }
 
       if( !found && (b & 0xC0)==0x80 )
         {
           // look for previous floppy disk image
-          b = find_floppy_image((b & 0x3f)-1, false) | 0x80;
+#if NUM_DRIVES>0
+		  b = find_floppy_image(b & 0x3f, false, 0x3f) | 0x80;
           if( b>0x80 ) 
             found = true;
           else
+#endif
             b = 0x7F;
         }
 
       if( !found && (b & 0xC0)==0x40 )
         {
-          // look for previous floppy disk image
-          b = find_tfloppy_image((b & 0x3f)-1, false) | 0x40;
+          // look for previous tarbell floppy disk image
+#if NUM_TDRIVES>0
+		  b = find_tfloppy_image(b & 0x3f, false, 0x3f) | 0x40;
           if( b>0x40 ) 
             found = true;
           else
+#endif
             b = 0x3F;
         }
 
       if( !found && (b & 0xC0)==0x00 )
         {
           // look for previous integrated program
-          b = b - 1;
-          if( prog_get_name(b) )
+          if( b>0 && prog_get_name(b) )
             found = true;
         }
     }
@@ -1682,6 +1682,9 @@ static bool load_config(byte fileno)
             if( config_serial_map_sim_to_host(i) >= HOST_NUM_SERIAL_PORTS )
               config_serial_device_settings[i] = set_bits(config_serial_device_settings[i], 17, 3, 0);              
         }
+
+      for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
+        config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
 
 #if STANDALONE>0
       config_flags |= CF_SERIAL_INPUT;      
@@ -2388,6 +2391,7 @@ void config_edit_serial_device(byte dev)
         case 27:
         case 'x': 
           config_serial_device_settings[dev] = settings;
+          config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(settings, 17, 3));
           serial_timer_interrupt_setup(dev);
           return;
         }
@@ -3177,6 +3181,9 @@ void config_defaults(bool apply)
 #endif
   config_serial_device_settings[CSM_ACR]   |= (1 << 7);  // enable CLOAD traps
 
+  for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
+    config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
+
   config_interrupt_vi_mask[0] = INT_DRIVE;
   config_interrupt_vi_mask[1] = INT_RTC;
   config_interrupt_vi_mask[2] = INT_2SIO1 | INT_2SIO2;
@@ -3216,7 +3223,20 @@ void config_defaults(bool apply)
 void config_setup(int n)
 {
   config_defaults(true);
-  if( n<0 || load_config(n) )
+
+  bool ok = true;
+  if( n>=0 )
+    {
+      ok = load_config(n);
+      if( !ok && n>0 )
+        {
+          Serial.print(F("Configuration ")); Serial.print(n);
+          Serial.println(F(" does not exist => using default configuration (0)"));
+          ok = load_config(0);
+        }
+    }
+
+  if( ok )
     {
       apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
       mem_set_ram_limit_usr(config_mem_size-1);
