@@ -1316,7 +1316,7 @@ void host_serial_end(byte i)
     }
 }
 
-int host_serial__available(byte i)
+int host_serial_available(byte i)
 {
   switch( i )
     {
@@ -1334,7 +1334,7 @@ int host_serial__available(byte i)
  return 0;
 }
 
-int host_serial__available_for_write(byte i)
+int host_serial_available_for_write(byte i)
 {
   switch( i )
     {

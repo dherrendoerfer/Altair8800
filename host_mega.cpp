@@ -313,7 +313,7 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
 }
 
 
-int host_serial__available_for_write(byte i)
+int host_serial_available_for_write(byte i)
 {
   return Serial.availableForWrite();
 }

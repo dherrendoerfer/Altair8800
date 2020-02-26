@@ -47,9 +47,16 @@ static volatile uint32_t a_serial_state_start;// __attribute__ ((alligned(8)));
 // Idle detect
 static volatile uint16_t a_idle = 20001;
 
+// Stats
+static volatile uint32_t a_stat_read = 0;
+static volatile uint32_t a_stat_timeout_err = 0;
+static volatile uint32_t a_stat_frame_err = 0;
+
 #define BITLEN 3333
-#define BITVALID 800
+#define BITVALID 900
 #define TONE_REPEATS 2
+
+#define MINSIGNAL 32
 
 // Tape send (Yes I know this can be done a lot simpler!!!)
 // For 1850Hz we use the entire wave, for 2400 we skip #2 and #8 from the waveform
@@ -67,8 +74,11 @@ static volatile uint8_t a_serial_write_buffer[8];
 static volatile uint8_t a_serial_write_floor = 0 ;
 static volatile uint8_t a_serial_write_ceil = 0;
 
-static volatile uint8_t sending = 0;
+static volatile uint8_t a_sending = 0;
 
+
+// Virtual serial port code
+//
 static uint8_t a_serial_write_avail()
 {
   if (a_serial_write_ceil < a_serial_write_floor)
@@ -111,15 +121,20 @@ static uint8_t a_serial_read()
   return 0;
 }
 
+volatile uint8_t det = 0; 
+
+// Tape encoder/decoder timer interrupt routine
+//
 void tapeUpdate()
 {
   uint32_t utime;
   ain_last=ain_current;
+//  ain_current = (ain_last + analogRead(A22) )/ 2;
   ain_current = analogRead(A22);
   utime=micros();
 
   // Idle detection 
-  if (!sending && ain_current < 520 && ain_current > 500) {
+  if (!a_sending && ain_current < 512+MINSIGNAL && ain_current > 512-MINSIGNAL) {
     if(a_idle > 20000){
       tapeTimer.update(2000000);
     }
@@ -133,10 +148,14 @@ void tapeUpdate()
     a_idle = 0;
   }
 
-  //detect every rising edge
-  if (ain_last <= 522 && ain_current > 522) {
+  //detect every rising edge 
+  if (ain_current < 512-MINSIGNAL*2)
+    det=0;
+
+  if (det == 0 && ain_current > 512) {
     rise_wave_period = utime - last_rise_millis;
     last_rise_millis = utime;
+    det=1;
   }
   else {
     goto decode; 
@@ -175,22 +194,31 @@ decode:
       a_state=1;
     }
   }
-  else if (mtime > 10*BITLEN ) {
-    //Timeout/Invalid
+  else if (a_state > 0 && mtime > 10*BITLEN ) {
+    //Timeout/invalid we really should never get here
+    if (a_state < 10)
+      a_stat_timeout_err++;
     a_state = 0;
     a_char = 0;
   }
-  else if (a_state < 10 && mtime > 9*BITLEN + BITVALID) {
+  else if (a_state == 10 && mtime < 10*BITLEN ) {
+    //Time's up either we've got a char, or we didn't
+    a_state = 0;
+    a_char = 0;
+  }
+  else if (a_state == 9 && mtime > 9*BITLEN + BITVALID) {
     //Stop bit (we test for that a couple of times)
     if (a_level == 0) {
-      a_state = 0;
       //store achar
       a_serial_store(a_char);
-      a_char = 0;
+      //Serial.print((char)a_char);
+      a_stat_read++;
     }
     else {
       //Stop Bit Error
+      a_stat_frame_err++;
     }
+    a_state = 10;
   }
   else if (a_state < 9 && mtime > 8*BITLEN + BITVALID) {
     //7 bit
@@ -254,7 +282,7 @@ decode:
   //---------------------------
   //Send Part of the IRQ
   
-  if (sending) {
+  if (a_sending) {
     if (a_send_idle == 0) {
       if (micros() > a_serial_send_start + BITLEN) {
         if (a_send_index == 10) {
@@ -331,7 +359,7 @@ decode:
     }
     else {
       //Done with sending leave sending mode
-      sending = 0;
+      a_sending = 0;
       a_idle = 0;
       analogWrite(A21,2048);
     }
@@ -342,7 +370,7 @@ decode:
       a_send_char = a_serial_write_buffer[a_serial_write_floor++];
       a_serial_write_floor &= 0x7;
       a_send_index = 0;
-      sending = 1;
+      a_sending = 1;
       a_send_idle = 1;
       a_send_idle_counter = 80000;
       tapeTimer.update(50);

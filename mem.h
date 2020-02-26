@@ -12,7 +12,7 @@
 #include "breakpoint.h"
 #include "Altair8800.h"
 
-extern byte Mem[MEMSIZE];
+extern byte *Mem;
 extern word mem_protected_limit;
 
 extern byte mem_protected_flags[32];

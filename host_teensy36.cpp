@@ -24,9 +24,7 @@
 //Define this, if you are using the AIO board. This board has a different LED numbering
 #define AIO 1
 
-
 #include <Arduino.h>
-//#include <DueFlashStorage.h>
 #include "Altair8800.h"
 #include "config.h"
 #include "host_teensy36.h"
@@ -66,9 +64,9 @@ static SdFatSdio SD;
 // Altair8800Again! LEDs
 #include <WS2812Serial.h>
 
-IntervalTimer updateTimer;
+static IntervalTimer updateTimer;
 
-volatile uint16_t kbd_state = 10;
+volatile uint8_t kbd_state = 10;
 volatile uint8_t switch_bank0,switch_bank1,switch_bank2,switch_bank3;
 volatile uint8_t state_bank0,state_bank1,state_bank2,state_bank3;
 volatile uint8_t rising_edge_bank2,rising_edge_bank3;
@@ -77,21 +75,24 @@ volatile boolean switch_change;
 #ifdef AIO
 #define NUMBER_OF_LEDS 36 
 #else
-#define NUMBER_OF_LEDS 48
+#define NUMBER_OF_LEDS 42
 #endif
 #define LEDS_PIN 10
 
-#define LEDCOLOR 0x100000
-#define LEDOFF   0x000000
-
-byte drawingMemory[NUMBER_OF_LEDS*3];         //  3 bytes per LED
 DMAMEM byte displayMemory[NUMBER_OF_LEDS*12]; // 12 bytes per LED
+byte drawingMemory[NUMBER_OF_LEDS*3];         //  3 bytes per LED
 WS2812Serial leds(NUMBER_OF_LEDS, displayMemory, drawingMemory, LEDS_PIN, WS2812_GRB);
 
 volatile uint16_t addr_led_local;
+volatile uint16_t status_led_local;
 volatile uint16_t data_led_local;
-volatile uint32_t status_led_local;
+#ifdef LEDLOW
+volatile uint16_t addr_led_local_low;
+volatile uint16_t status_led_local_low;
+volatile uint16_t data_led_local_low;
+#endif
 
+// Display the system status on VGA ?
 volatile boolean vga_sysmon = true; 
 
 
@@ -104,6 +105,7 @@ static const uint8_t address_to_LED[] = {21,22,23,24,25,26,27,28,29,    31,32,33
 static const uint8_t data_to_LED[]    = {20,19,18,17,16,15,14,13};
 static const uint8_t status_to_LED[]  = {9,8,7,6,5,4,3,2,1,0,40,41};
 #endif
+
 
 // Include audio tape support 
 #include "host_teensy_tape.h"
@@ -506,7 +508,7 @@ void host_serial_end(byte i)
     }
 }
 
-int host_serial__available(byte i)
+int host_serial_available(byte i)
 {
   switch( i )
     {
@@ -519,7 +521,7 @@ int host_serial__available(byte i)
  return 0;
 }
 
-int host_serial__available_for_write(byte i)
+int host_serial_available_for_write(byte i)
 {
   switch( i )
     {
@@ -873,31 +875,58 @@ void host_system_info()
 static void updateAddressLEDs()
 {
   for (int i=0;i<16;i++) {
+    uint8_t led=address_to_LED[i];
     if (addr_led_local & (1<<i))
-      leds.setPixel(address_to_LED[i], LEDCOLOR);
+      leds.setPixel(led, LEDCOLOR);
     else
-      leds.setPixel(address_to_LED[i], LEDOFF);
+#ifdef LEDLOW    
+      if (addr_led_local_low & (1<<i))
+        leds.setPixel(led, LEDLOW);
+      else
+#endif
+        leds.setPixel(led, LEDOFF);
   }
+#ifdef LEDLOW    
+  addr_led_local_low = 0;
+#endif
 }
 
 static void updateDataLEDs()
 {
   for (int i=0;i<8;i++) {
+    uint8_t led=data_to_LED[i];
     if (data_led_local & (1<<i))
-      leds.setPixel(data_to_LED[i],LEDCOLOR);
+      leds.setPixel(led,LEDCOLOR);
     else
-      leds.setPixel(data_to_LED[i],LEDOFF);
+#ifdef LEDLOW    
+      if (data_led_local_low & (1<<i))
+        leds.setPixel(led,LEDLOW);
+      else
+#endif
+        leds.setPixel(led,LEDOFF);
   }
+#ifdef LEDLOW
+  data_led_local_low = 0;
+#endif
 }
 
 static void updateStatusLEDs()
 {
   for (int i=0;i<13;i++) {
+    uint8_t led=status_to_LED[i];
     if (status_led_local & (1<<i))
-      leds.setPixel(status_to_LED[i],LEDCOLOR);
+      leds.setPixel(led,LEDCOLOR);
     else
-      leds.setPixel(status_to_LED[i],LEDOFF);
+#ifdef LEDLOW    
+      if (status_led_local_low & (1<<i))
+        leds.setPixel(led, LEDLOW);
+      else
+#endif
+      leds.setPixel(led,LEDOFF);
   }
+#ifdef LEDLOW    
+  status_led_local_low = 0;
+#endif
 }
 
 // -----------------------------------------------------------------------------
@@ -910,7 +939,7 @@ void monitor_panel()
   uvga.println(" I P M I M O H S I W      D D D D D D D D");
   uvga.println(" N R E N 1 U L T N O      7 6 5 4 3 2 1 0");
   uvga.println(" T O M P   T T A T");
-  uvga.println("   T R       A C");
+  uvga.println(" E T R       A C");
   uvga.println("               K ");
   uvga.println("");
   uvga.println("        --------------ADDRESS------------");
@@ -925,6 +954,9 @@ void monitor_panel()
   uvga.println("        S S S S S S S S   S S S S S S S S");
   uvga.println("        1 1 1 1 1 1 9 8   7 6 5 4 3 2 1 0");
   uvga.println("        5 4 3 2 1 0");
+  uvga.println("");
+  uvga.println("");
+  uvga.println(" Tape stats: recv    err_frm  err_tim");
 }
 
 static void m_led(uint8_t posx, uint8_t posy, uint16_t on)
@@ -933,20 +965,20 @@ static void m_led(uint8_t posx, uint8_t posy, uint16_t on)
   uint16_t y = 3 + 8*posy;
 
   if (on) {
-    uvga.drawPixel(x,y,0xE0);
-    uvga.drawPixel(x+1,y,0xE0);
-    uvga.drawPixel(x,y+1,0xE0);
-    uvga.drawPixel(x+1,y+1,0xE0);
-    uvga.drawPixel(x+2,y,0xE0);
-    uvga.drawPixel(x+2,y+1,0xE0);
+    uvga.drawPixelNoSync(x,y,0xE0);
+    uvga.drawPixelNoSync(x+1,y,0xE0);
+    uvga.drawPixelNoSync(x,y+1,0xE0);
+    uvga.drawPixelNoSync(x+1,y+1,0xE0);
+    uvga.drawPixelNoSync(x+2,y,0xE0);
+    uvga.drawPixelNoSync(x+2,y+1,0xE0);
   }
   else {
-    uvga.drawPixel(x,y,0x00);
-    uvga.drawPixel(x+1,y,0x00);
-    uvga.drawPixel(x,y+1,0x00);
-    uvga.drawPixel(x+1,y+1,0x00);
-    uvga.drawPixel(x+2,y,0x00);
-    uvga.drawPixel(x+2,y+1,0x00);
+    uvga.drawPixelNoSync(x,y,0x00);
+    uvga.drawPixelNoSync(x+1,y,0x00);
+    uvga.drawPixelNoSync(x,y+1,0x00);
+    uvga.drawPixelNoSync(x+1,y+1,0x00);
+    uvga.drawPixelNoSync(x+2,y,0x00);
+    uvga.drawPixelNoSync(x+2,y+1,0x00);
   }
 }
 static const uint8_t m_status_to_LED[] = {19,17,15,13,11,9,7,5,3,1,3,1};
@@ -957,7 +989,7 @@ static void m_led_update_status_LEDs()
   uint8_t i;
   for (i=0;i<10;i++)
     m_led(m_status_to_LED[i], 2, status_led_local & (1<<i));
-  for (i=10;i<13;i++)
+  for (i=10;i<12;i++)
     m_led(m_status_to_LED[i], 10, status_led_local & (1<<i));
 
   for (i=0;i<8;i++) {
@@ -1069,7 +1101,13 @@ void panelUpdate()
     kbd_state=0;
 
     if (vga_sysmon) {
-      m_led_update_switch_LEDs();      
+      m_led_update_switch_LEDs();     
+      host_vga_setpos(13,24);
+      uvga.print(a_stat_read);
+      host_vga_setpos(21,24);
+      uvga.println(a_stat_frame_err);
+      host_vga_setpos(30,24);
+      uvga.println(a_stat_timeout_err);
     }
 
     return;
@@ -1193,8 +1231,8 @@ void host_setup()
 
   if (Serial) Serial.println("PRE Tape");
   //Start tape update timer
-  tapeTimer.begin(tapeUpdate, 50);
   tapeTimer.priority(32);
+  tapeTimer.begin(tapeUpdate, 50);
 
   if (Serial) Serial.println("PRE LED");
   //Init non-blocking WS2812b lib

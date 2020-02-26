@@ -47,13 +47,13 @@ void SwitchSerialClass::end()
 
 int SwitchSerialClass::available(void)
 {
-  return host_serial__available(m_selected);
+  return host_serial_available(m_selected);
 }
 
 
 int SwitchSerialClass::availableForWrite(void)
 {
-  return host_serial__available_for_write(m_selected);
+  return host_serial_available_for_write(m_selected);
 }
 
 
